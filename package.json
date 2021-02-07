@@ -1,0 +1,23 @@
+{
+  "name": "forkify",
+  "version": "1.0.0",
+  "description": "Recipe application",
+  "main": "index.html",
+  "scripts": {
+    "start": "parcel index.html",
+    "build": "parcel build index.html"
+  },
+  "author": "Jay Pansare",
+  "license": "ISC",
+  "devDependencies": {
+    "parcel": "^2.0.0-beta.1",
+    "sass": "^1.30.0"
+  },
+  "dependencies": {
+    "fractional": "^1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "recipe application"
+  }
+}
