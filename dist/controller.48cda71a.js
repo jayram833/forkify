@@ -449,6 +449,8 @@ var _paginationView = _interopRequireDefault(require("./views/paginationView.js"
 
 var _bookmarksView = _interopRequireDefault(require("./views/bookmarksView.js"));
 
+var _addRecipeView = _interopRequireDefault(require("./views/addRecipeView.js"));
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
@@ -533,6 +535,17 @@ const controlBookmarks = function () {
   _bookmarksView.default.render(model.state.bookmarks);
 };
 
+const controlAddRecipe = async function (newRecipe) {
+  try {
+    // Upload the new recipe data
+    await model.uploadRecipe(newRecipe);
+  } catch (err) {
+    console.log('💥', err);
+
+    _addRecipeView.default.renderError(err.message);
+  }
+};
+
 const init = function () {
   _bookmarksView.default.addHandlerRender(controlBookmarks);
 
@@ -545,16 +558,18 @@ const init = function () {
   _searchView.default.addHandlerSearch(controlSearchResults);
 
   _paginationView.default.addHandlerClick(controlPagination);
+
+  _addRecipeView.default.addHandlerUpload(controlAddRecipe);
 };
 
 init();
-},{"./model.js":"aabf248f40f7693ef84a0cb99f385d1f","./views/recipeView.js":"bcae1aced0301b01ccacb3e6f7dfede8","./views/searchView.js":"c5d792f7cac03ef65de30cc0fbb2cae7","./views/resultsView.js":"eacdbc0d50ee3d2819f3ee59366c2773","./views/paginationView.js":"d2063f3e7de2e4cdacfcb5eb6479db05","./views/bookmarksView.js":"7ed9311e216aa789713f70ebeec3ed40"}],"aabf248f40f7693ef84a0cb99f385d1f":[function(require,module,exports) {
+},{"./model.js":"aabf248f40f7693ef84a0cb99f385d1f","./views/recipeView.js":"bcae1aced0301b01ccacb3e6f7dfede8","./views/searchView.js":"c5d792f7cac03ef65de30cc0fbb2cae7","./views/resultsView.js":"eacdbc0d50ee3d2819f3ee59366c2773","./views/paginationView.js":"d2063f3e7de2e4cdacfcb5eb6479db05","./views/bookmarksView.js":"7ed9311e216aa789713f70ebeec3ed40","./views/addRecipeView.js":"4dd83c2a08c1751220d223c54dc70016"}],"aabf248f40f7693ef84a0cb99f385d1f":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.deleteBookmark = exports.addBookmark = exports.updateServings = exports.getSearchResultsPage = exports.loadSearchResults = exports.loadRecipe = exports.state = void 0;
+exports.uploadRecipe = exports.deleteBookmark = exports.addBookmark = exports.updateServings = exports.getSearchResultsPage = exports.loadSearchResults = exports.loadRecipe = exports.state = void 0;
 
 var _config = require("./config.js");
 
@@ -668,9 +683,28 @@ init();
 
 const clearBookmarks = function () {
   localStorage.clear('bookmarks');
+}; // clearBookmarks();
+
+
+const uploadRecipe = async function (newRecipe) {
+  try {
+    const ingredients = Object.entries(newRecipe).filter(entry => entry[0].startsWith('ingredient') && entry[1] !== '').map(ing => {
+      const ingArr = ing[1].replaceAll(' ', '').split(',');
+      if (ingArr.length !== 3) throw new Error('wrong ingredient format Please use the correct format');
+      const [quantity, unit, description] = ingArr;
+      return {
+        quantity: quantity ? +quantity : null,
+        unit,
+        description
+      };
+    });
+    console.log(ingredients);
+  } catch (err) {
+    throw err;
+  }
 };
 
-clearBookmarks();
+exports.uploadRecipe = uploadRecipe;
 },{"./config.js":"09212d541c5c40ff2bd93475a904f8de","./helpers.js":"0e8dcd8a4e1c61cf18f78e1c2563655d"}],"09212d541c5c40ff2bd93475a904f8de":[function(require,module,exports) {
 "use strict";
 
@@ -1707,6 +1741,74 @@ class BookmarksView extends _View.default {
 var _default = new BookmarksView();
 
 exports.default = _default;
-},{"./View.js":"61b7a1b097e16436be3d54c2f1828c73","./previewView.js":"e4d6583325a8b6c9380670c4f233bf07","url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148"}]},{},["7c135670738ff8acd281855fd9468e27","c9740ead66b4064e2981f2535f5c8ce9","175e469a7ea7db1c8c0744d04372621f"], null)
+},{"./View.js":"61b7a1b097e16436be3d54c2f1828c73","./previewView.js":"e4d6583325a8b6c9380670c4f233bf07","url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148"}],"4dd83c2a08c1751220d223c54dc70016":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _View = _interopRequireDefault(require("./View.js"));
+
+var _icons = _interopRequireDefault(require("url:../../img/icons.svg"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+//parcel 2
+class AddRecipeView extends _View.default {
+  constructor() {
+    super();
+
+    _defineProperty(this, "_parentElement", document.querySelector('.upload'));
+
+    _defineProperty(this, "_window", document.querySelector('.add-recipe-window'));
+
+    _defineProperty(this, "_overlay", document.querySelector('.overlay'));
+
+    _defineProperty(this, "_btnOpen", document.querySelector('.nav__btn--add-recipe'));
+
+    _defineProperty(this, "_btnClose", document.querySelector('.btn--close-modal'));
+
+    this._addHandlerShowWindow();
+
+    this._addHandlerHideWindow();
+  }
+
+  toggleWindow() {
+    this._overlay.classList.toggle('hidden');
+
+    this._window.classList.toggle('hidden');
+  }
+
+  _addHandlerShowWindow() {
+    this._btnOpen.addEventListener('click', this.toggleWindow.bind(this));
+  }
+
+  _addHandlerHideWindow() {
+    this._btnClose.addEventListener('click', this.toggleWindow.bind(this));
+
+    this._overlay.addEventListener('click', this.toggleWindow.bind(this));
+  }
+
+  addHandlerUpload(handler) {
+    this._parentElement.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const dataArr = [...new FormData(this)];
+      const data = Object.fromEntries(dataArr);
+      handler(data);
+    });
+  }
+
+  _generateMarkup() {}
+
+}
+
+var _default = new AddRecipeView();
+
+exports.default = _default;
+},{"./View.js":"61b7a1b097e16436be3d54c2f1828c73","url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148"}]},{},["7c135670738ff8acd281855fd9468e27","c9740ead66b4064e2981f2535f5c8ce9","175e469a7ea7db1c8c0744d04372621f"], null)
 
 //# sourceMappingURL=controller.48cda71a.js.map
