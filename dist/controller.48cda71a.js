@@ -439,6 +439,8 @@ module.exports.resolve = resolve;
 
 var model = _interopRequireWildcard(require("./model.js"));
 
+var _config = require("./config.js");
+
 var _recipeView = _interopRequireDefault(require("./views/recipeView.js"));
 
 var _searchView = _interopRequireDefault(require("./views/searchView.js"));
@@ -537,8 +539,27 @@ const controlBookmarks = function () {
 
 const controlAddRecipe = async function (newRecipe) {
   try {
-    // Upload the new recipe data
+    // Show loading spinner
+    _addRecipeView.default.renderSpinner(); // Upload the new recipe data
+
+
     await model.uploadRecipe(newRecipe);
+    console.log(model.state.recipe); // Render recipe
+
+    _recipeView.default.render(model.state.recipe); // Success message
+
+
+    _addRecipeView.default.renderMessage(); // Render bookmark view
+
+
+    _bookmarksView.default.render(model.state.bookmarks); // Change ID in URL
+
+
+    window.history.pushState(null, '', `#${model.state.recipe.id}`); // Close form window
+
+    setTimeout(function () {
+      _addRecipeView.default.toggleWindow();
+    }, _config.MODAL_CLOSE_SEC * 1000);
   } catch (err) {
     console.log('💥', err);
 
@@ -563,7 +584,7 @@ const init = function () {
 };
 
 init();
-},{"./model.js":"aabf248f40f7693ef84a0cb99f385d1f","./views/recipeView.js":"bcae1aced0301b01ccacb3e6f7dfede8","./views/searchView.js":"c5d792f7cac03ef65de30cc0fbb2cae7","./views/resultsView.js":"eacdbc0d50ee3d2819f3ee59366c2773","./views/paginationView.js":"d2063f3e7de2e4cdacfcb5eb6479db05","./views/bookmarksView.js":"7ed9311e216aa789713f70ebeec3ed40","./views/addRecipeView.js":"4dd83c2a08c1751220d223c54dc70016"}],"aabf248f40f7693ef84a0cb99f385d1f":[function(require,module,exports) {
+},{"./model.js":"aabf248f40f7693ef84a0cb99f385d1f","./config.js":"09212d541c5c40ff2bd93475a904f8de","./views/recipeView.js":"bcae1aced0301b01ccacb3e6f7dfede8","./views/searchView.js":"c5d792f7cac03ef65de30cc0fbb2cae7","./views/resultsView.js":"eacdbc0d50ee3d2819f3ee59366c2773","./views/paginationView.js":"d2063f3e7de2e4cdacfcb5eb6479db05","./views/bookmarksView.js":"7ed9311e216aa789713f70ebeec3ed40","./views/addRecipeView.js":"4dd83c2a08c1751220d223c54dc70016"}],"aabf248f40f7693ef84a0cb99f385d1f":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -575,6 +596,7 @@ var _config = require("./config.js");
 
 var _helpers = require("./helpers.js");
 
+// import { getJSON, sendJSON } from './helpers.js';
 const state = {
   recipe: {},
   search: {
@@ -587,23 +609,31 @@ const state = {
 };
 exports.state = state;
 
+const createRecipeObject = function (data) {
+  let {
+    recipe
+  } = data.data;
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    publisher: recipe.publisher,
+    sourceUrl: recipe.source_url,
+    image: recipe.image_url,
+    servings: recipe.servings,
+    cookingTime: recipe.cooking_time,
+    ingredients: recipe.ingredients,
+    ...(recipe.key && {
+      key: recipe.key
+    })
+  };
+};
+
 const loadRecipe = async function (id) {
   try {
-    const data = await (0, _helpers.getJSON)(`${_config.API_URL}${id}`);
-    let {
-      recipe
-    } = data.data;
-    state.recipe = {
-      id: recipe.id,
-      title: recipe.title,
-      publisher: recipe.publisher,
-      sourceUrl: recipe.source_url,
-      image: recipe.image_url,
-      servings: recipe.servings,
-      cookingTime: recipe.cooking_time,
-      ingredients: recipe.ingredients
-    };
+    const data = await (0, _helpers.AJAX)(`${_config.API_URL}${id}?key=${_config.KEY}`);
+    state.recipe = createRecipeObject(data);
     if (state.bookmarks.some(bookmark => bookmark.id === id)) state.recipe.bookmarked = true;else state.recipe.bookmarked = false;
+    console.log(state.recipe);
   } catch (err) {
     console.error(`${err}💥`);
     throw err;
@@ -615,13 +645,16 @@ exports.loadRecipe = loadRecipe;
 const loadSearchResults = async function (query) {
   try {
     state.search.query = query;
-    const data = await (0, _helpers.getJSON)(`${_config.API_URL}?search=${query}`);
+    const data = await (0, _helpers.AJAX)(`${_config.API_URL}?search=${query}&key=${_config.KEY}`);
     state.search.results = data.data.recipes.map(rec => {
       return {
         id: rec.id,
         title: rec.title,
         publisher: rec.publisher,
-        image: rec.image_url
+        image: rec.image_url,
+        ...(rec.key && {
+          key: rec.key
+        })
       };
     });
     state.search.page = 1;
@@ -689,7 +722,8 @@ const clearBookmarks = function () {
 const uploadRecipe = async function (newRecipe) {
   try {
     const ingredients = Object.entries(newRecipe).filter(entry => entry[0].startsWith('ingredient') && entry[1] !== '').map(ing => {
-      const ingArr = ing[1].replaceAll(' ', '').split(',');
+      const ingArr = ing[1].split(',').map(el => el.trim()); // const ingArr = ing[1].replaceAll(' ', '').split(',');
+
       if (ingArr.length !== 3) throw new Error('wrong ingredient format Please use the correct format');
       const [quantity, unit, description] = ingArr;
       return {
@@ -698,7 +732,18 @@ const uploadRecipe = async function (newRecipe) {
         description
       };
     });
-    console.log(ingredients);
+    const recipe = {
+      title: newRecipe.title,
+      source_url: newRecipe.sourceUrl,
+      image_url: newRecipe.image,
+      publisher: newRecipe.publisher,
+      cooking_time: +newRecipe.cookingTime,
+      servings: +newRecipe.servings,
+      ingredients
+    };
+    const data = await (0, _helpers.AJAX)(`${_config.API_URL}?key=${_config.KEY}`, recipe);
+    state.recipe = createRecipeObject(data);
+    addBookmark(state.recipe);
   } catch (err) {
     throw err;
   }
@@ -711,20 +756,24 @@ exports.uploadRecipe = uploadRecipe;
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.RES_PER_PAGE = exports.TIMEOUT_SEC = exports.API_URL = void 0;
+exports.MODAL_CLOSE_SEC = exports.KEY = exports.RES_PER_PAGE = exports.TIMEOUT_SEC = exports.API_URL = void 0;
 const API_URL = 'https://forkify-api.herokuapp.com/api/v2/recipes/';
 exports.API_URL = API_URL;
 const TIMEOUT_SEC = 10;
 exports.TIMEOUT_SEC = TIMEOUT_SEC;
 const RES_PER_PAGE = 10;
 exports.RES_PER_PAGE = RES_PER_PAGE;
+const KEY = '1f4fae44-e9e4-44e0-b64b-1bbc12187227';
+exports.KEY = KEY;
+const MODAL_CLOSE_SEC = 2.5;
+exports.MODAL_CLOSE_SEC = MODAL_CLOSE_SEC;
 },{}],"0e8dcd8a4e1c61cf18f78e1c2563655d":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.getJSON = void 0;
+exports.AJAX = void 0;
 
 var _config = require("./config.js");
 
@@ -736,9 +785,15 @@ const timeout = function (s) {
   });
 };
 
-const getJSON = async function (url) {
+const AJAX = async function (url, uploadData = undefined) {
   try {
-    const fetchPro = fetch(url);
+    const fetchPro = uploadData ? fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(uploadData)
+    }) : fetch(url);
     const res = await Promise.race([fetchPro, timeout(_config.TIMEOUT_SEC)]);
     const data = await res.json();
     if (!res.ok) throw new Error(`${data.message} (${res.status})`);
@@ -747,8 +802,41 @@ const getJSON = async function (url) {
     throw err;
   }
 };
+/*
+export const getJSON = async function (url) {
+  try {
+    const res = await Promise.race([fetchPro, timeout(TIMEOUT_SEC)]);
+    const data = await res.json();
 
-exports.getJSON = getJSON;
+    if (!res.ok) throw new Error(`${data.message} (${res.status})`);
+    return data;
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const sendJSON = async function (url, uploadData) {
+  try {
+    const fetchPro = fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(uploadData),
+    });
+    const res = await Promise.race([fetchPro, timeout(TIMEOUT_SEC)]);
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(`${data.message} (${res.status})`);
+    return data;
+  } catch (err) {
+    throw err;
+  }
+};
+*/
+
+
+exports.AJAX = AJAX;
 },{"./config.js":"09212d541c5c40ff2bd93475a904f8de"}],"bcae1aced0301b01ccacb3e6f7dfede8":[function(require,module,exports) {
 "use strict";
 
@@ -839,7 +927,11 @@ ${_icons.default}#icon-users"></use>
         </div>
       </div>
 
-      <div class="recipe__user-generated">
+      <div class="recipe__user-generated ${this._data.key ? '' : 'hidden'}">
+        <svg>
+          <use href="${_icons.default}#icon-user"></use>
+        </svg>
+      </div>
         
       </div>
       <button class="btn--round btn--bookmark">
@@ -897,7 +989,114 @@ ${_icons.default}#icon-users"></use>
 var _default = new RecipeView();
 
 exports.default = _default;
-},{"url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148","fractional":"ddbc156a7c16e105c8df04e9fdec967d","./View.js":"61b7a1b097e16436be3d54c2f1828c73"}],"8c2de301821df9d109d579a1ccee3148":[function(require,module,exports) {
+},{"./View.js":"61b7a1b097e16436be3d54c2f1828c73","url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148","fractional":"ddbc156a7c16e105c8df04e9fdec967d"}],"61b7a1b097e16436be3d54c2f1828c73":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+
+var _icons = _interopRequireDefault(require("url:../../img/icons.svg"));
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
+//parcel 2
+class View {
+  constructor() {
+    _defineProperty(this, "_data", void 0);
+  }
+
+  render(data, render = true) {
+    if (!data || Array.isArray(data) && data.length === 0) return this.renderError();
+    this._data = data;
+
+    const markup = this._generateMarkup();
+
+    if (!render) return markup;
+
+    this._clear();
+
+    this._parentElement.insertAdjacentHTML('afterbegin', markup);
+  }
+
+  update(data) {
+    this._data = data;
+
+    const newMarkup = this._generateMarkup();
+
+    const newDom = document.createRange().createContextualFragment(newMarkup);
+    const newElements = Array.from(newDom.querySelectorAll('*'));
+    const curElements = Array.from(this._parentElement.querySelectorAll('*'));
+    newElements.forEach((newEl, i) => {
+      const curEl = curElements[i]; // Updates change text
+
+      if (!newEl.isEqualNode(curEl) && newEl.firstChild?.nodeValue.trim() !== '') {
+        curEl.textContent = newEl.textContent;
+      } // Updates changed attibutes
+
+
+      if (!newEl.isEqualNode(curEl)) Array.from(newEl.attributes).forEach(attr => curEl.setAttribute(attr.name, attr.value));
+    });
+  }
+
+  _clear() {
+    this._parentElement.innerHTML = '';
+  }
+
+  renderSpinner() {
+    const markup = `
+       <div class="spinner">
+      <svg>
+        <use href="${_icons.default}#icon-loader"></use>
+      </svg>
+    </div> `;
+
+    this._clear();
+
+    this._parentElement.insertAdjacentHTML('afterbegin', markup);
+  }
+
+  renderError(message = this._errorMessage) {
+    const markup = `
+      <div class="error">
+          <div>
+              <svg>
+                  <use href="${_icons.default}#icon-alert-triangle"></use>
+              </svg>
+          </div>
+          <p>${message}</p>
+      </div> 
+        `;
+
+    this._clear();
+
+    this._parentElement.insertAdjacentHTML('afterbegin', markup);
+  }
+
+  renderMessage(message = this._successMessage) {
+    const markup = `
+      <div class="message">
+          <div>
+              <svg>
+                  <use href="${_icons.default}#icon-smile"></use>
+              </svg>
+          </div>
+          <p>${message}</p>
+      </div> 
+        `;
+
+    this._clear();
+
+    this._parentElement.insertAdjacentHTML('afterbegin', markup);
+  }
+
+}
+
+exports.default = View;
+},{"url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148"}],"8c2de301821df9d109d579a1ccee3148":[function(require,module,exports) {
 module.exports = require('./bundle-url').getBundleURL() + require('./relative-path')("d7402a8fb056373c", "e3dc4f9ca6451540");
 },{"./bundle-url":"2146da1905b95151ed14d455c784e7b7","./relative-path":"1b9943ef25c7bbdf0dd1b9fa91880a6c"}],"2146da1905b95151ed14d455c784e7b7":[function(require,module,exports) {
 "use strict";
@@ -1379,114 +1578,7 @@ Fraction.primeFactors = function(n)
 
 module.exports.Fraction = Fraction
 
-},{}],"61b7a1b097e16436be3d54c2f1828c73":[function(require,module,exports) {
-"use strict";
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = void 0;
-
-var _icons = _interopRequireDefault(require("url:../../img/icons.svg"));
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-
-//parcel 2
-class View {
-  constructor() {
-    _defineProperty(this, "_data", void 0);
-  }
-
-  render(data, render = true) {
-    if (!data || Array.isArray(data) && data.length === 0) return this.renderError();
-    this._data = data;
-
-    const markup = this._generateMarkup();
-
-    if (!render) return markup;
-
-    this._clear();
-
-    this._parentElement.insertAdjacentHTML('afterbegin', markup);
-  }
-
-  update(data) {
-    this._data = data;
-
-    const newMarkup = this._generateMarkup();
-
-    const newDom = document.createRange().createContextualFragment(newMarkup);
-    const newElements = Array.from(newDom.querySelectorAll('*'));
-    const curElements = Array.from(this._parentElement.querySelectorAll('*'));
-    newElements.forEach((newEl, i) => {
-      const curEl = curElements[i]; // Updates change text
-
-      if (!newEl.isEqualNode(curEl) && newEl.firstChild?.nodeValue.trim() !== '') {
-        curEl.textContent = newEl.textContent;
-      } // Updates changed attibutes
-
-
-      if (!newEl.isEqualNode(curEl)) Array.from(newEl.attributes).forEach(attr => curEl.setAttribute(attr.name, attr.value));
-    });
-  }
-
-  _clear() {
-    this._parentElement.innerHTML = '';
-  }
-
-  renderSpinner() {
-    const markup = `
-       <div class="spinner">
-      <svg>
-        <use href="${_icons.default}#icon-loader"></use>
-      </svg>
-    </div> `;
-
-    this._clear();
-
-    this._parentElement.insertAdjacentHTML('afterbegin', markup);
-  }
-
-  renderError(message = this._errorMessage) {
-    const markup = `
-      <div class="error">
-          <div>
-              <svg>
-                  <use href="${_icons.default}#icon-alert-triangle"></use>
-              </svg>
-          </div>
-          <p>${message}</p>
-      </div> 
-        `;
-
-    this._clear();
-
-    this._parentElement.insertAdjacentHTML('afterbegin', markup);
-  }
-
-  renderMessage(message = this._successMessage) {
-    const markup = `
-      <div class="message">
-          <div>
-              <svg>
-                  <use href="${_icons.default}#icon-smile"></use>
-              </svg>
-          </div>
-          <p>${message}</p>
-      </div> 
-        `;
-
-    this._clear();
-
-    this._parentElement.insertAdjacentHTML('afterbegin', markup);
-  }
-
-}
-
-exports.default = View;
-},{"url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148"}],"c5d792f7cac03ef65de30cc0fbb2cae7":[function(require,module,exports) {
+},{}],"c5d792f7cac03ef65de30cc0fbb2cae7":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -1564,7 +1656,7 @@ class ResultsView extends _View.default {
 var _default = new ResultsView();
 
 exports.default = _default;
-},{"./View.js":"61b7a1b097e16436be3d54c2f1828c73","url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148","./previewView.js":"e4d6583325a8b6c9380670c4f233bf07"}],"e4d6583325a8b6c9380670c4f233bf07":[function(require,module,exports) {
+},{"./View.js":"61b7a1b097e16436be3d54c2f1828c73","./previewView.js":"e4d6583325a8b6c9380670c4f233bf07","url:../../img/icons.svg":"8c2de301821df9d109d579a1ccee3148"}],"e4d6583325a8b6c9380670c4f233bf07":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -1600,7 +1692,12 @@ class previewView extends _View.default {
                 <h4 class="preview__title">${this._data.title}</h4>
                 <p class="preview__publisher">${this._data.publisher}</p>
                 
-            </div>
+                <div class="preview__user-generated ${this._data.key ? '' : 'hidden'}">
+                  <svg>
+                    <use href="${_icons.default}#icon-user"></use>
+                  </svg>
+                </div>
+              </div>
         </a>
     </li>
 `;
@@ -1763,6 +1860,8 @@ class AddRecipeView extends _View.default {
     super();
 
     _defineProperty(this, "_parentElement", document.querySelector('.upload'));
+
+    _defineProperty(this, "_message", 'Recipe was successfully uploaded');
 
     _defineProperty(this, "_window", document.querySelector('.add-recipe-window'));
 
