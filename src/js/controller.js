@@ -6,6 +6,9 @@ import resultsView from './views/resultsView.js';
 import paginationView from './views/paginationView.js';
 import bookmarksView from './views/bookmarksView.js';
 import addRecipeView from './views/addRecipeView.js';
+
+import 'generator-runtime/runtime';
+import { async } from '.generator-runtime';
 // import icons from '../img/icons.svg'; //parcel 1
 
 // const { async } = require('q');
